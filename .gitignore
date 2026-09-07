@@ -1,0 +1,18 @@
+# 憑證 — 絕對不可進版控
+auth_state.json
+auth_state*.json
+*_state.json
+.env
+.env.*
+!.env.example
+secrets/
+data/
+
+# 依賴與建置產物
+node_modules/
+dist/
+*.log
+
+# 作業系統
+.DS_Store
+Thumbs.db

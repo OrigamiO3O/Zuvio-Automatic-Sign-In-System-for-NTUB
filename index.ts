@@ -1,38 +1,42 @@
 import { ZuvioCore } from './core.js';
+import { scanOnce } from './runner.js';
+import { openWindows } from './config.js';
+import { SessionExpiredError } from './session.js';
 
-const CLASSROOM_LAT = 25.042345;
-const CLASSROOM_LNG = 121.525350;
-
-async function main() {
-  const zuvio = new ZuvioCore('auth_state.json');
-
+/**
+ * 單次掃描（不排程），用來手動測試憑證與簽到流程是否正常。
+ * 排程常駐請用 schedule.ts。
+ */
+async function main(): Promise<void> {
+  let zuvio: ZuvioCore;
   try {
-
-    const courses = await zuvio.getMyCourses();
-
-    if (courses.length === 0) {
-      console.log('⚠️ 未找到課程，請檢查 Session 是否過期或檔案路徑是否正確。');
+    zuvio = new ZuvioCore();
+  } catch (err: unknown) {
+    if (err instanceof SessionExpiredError) {
+      console.error(`🔑 ${err.message}`);
+      process.exitCode = 1;
       return;
     }
+    throw err;
+  }
 
-    console.log(`--- [START] 開始逐一檢查 ${courses.length} 門課程的點名狀態 ---`);
+  try {
+    console.log('--- [START] 單次掃描 ---');
+    const outcome = await scanOnce(zuvio, openWindows());
 
-    
-    for (const course of courses) {
-      console.log(`\n> 正在處理: ${course.name} (${course.id})`);
-      
-      const success = await zuvio.checkIn(course.id, CLASSROOM_LAT, CLASSROOM_LNG);
-
-      if (success) {
-        console.log(`${course.name} 簽到流程執行完畢。`);
-      }
+    console.log('\n--- [FINISH] 掃描結束 ---');
+    console.log(`成功 ${outcome.succeeded.length} 門` +
+      (outcome.succeeded.length ? `：${outcome.succeeded.join('、')}` : ''));
+    if (outcome.failed.length) {
+      console.log(`失敗 ${outcome.failed.length} 門：${outcome.failed.join('、')}`);
     }
-
-    console.log('\n--- [FINISH] 所有掃描任務已結束 ---');
-
-  } catch (error: any) {
-    console.error('[CRITICAL] 執行時發生未預期錯誤:', error.message);
+    if (outcome.sessionExpired || outcome.failed.length) process.exitCode = 1;
+  } finally {
+    await zuvio.close();
   }
 }
 
-main();
+main().catch((err: unknown) => {
+  console.error('[CRITICAL] 執行時發生未預期錯誤:', err instanceof Error ? err.message : err);
+  process.exitCode = 1;
+});

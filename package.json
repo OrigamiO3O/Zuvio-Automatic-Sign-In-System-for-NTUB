@@ -1,0 +1,34 @@
+{
+  "name": "zuvio-automatic-sign-in-system-for-ntub",
+  "version": "1.0.0",
+  "description": "這是一個基於 Playwright 開發的 Zuvio 自動點名腳本。本專案透過無頭瀏覽器模擬真實使用者的網頁環境，另用 `node-cron` 進行本地端的時間排程，以實現於指定課程時段內自動完成 Zuvio 簽到的功能。",
+  "main": "index.ts",
+  "scripts": {
+    "login": "tsx auth.ts",
+    "scan": "tsx index.ts",
+    "start": "tsx schedule.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OrigamiO3O/Zuvio-Automatic-Sign-In-System-for-NTUB.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/OrigamiO3O/Zuvio-Automatic-Sign-In-System-for-NTUB/issues"
+  },
+  "homepage": "https://github.com/OrigamiO3O/Zuvio-Automatic-Sign-In-System-for-NTUB#readme",
+  "dependencies": {
+    "node-cron": "^4.2.1",
+    "playwright": "^1.58.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
