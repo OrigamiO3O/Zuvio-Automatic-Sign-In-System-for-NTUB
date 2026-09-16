@@ -7,7 +7,8 @@
     "login": "tsx auth.ts",
     "scan": "tsx index.ts",
     "start": "tsx schedule.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts"
   },
   "repository": {
     "type": "git",

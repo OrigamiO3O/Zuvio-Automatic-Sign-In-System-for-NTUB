@@ -44,12 +44,14 @@
 ## 檔案結構說明
 
 * `config.ts`：課表、教室座標、掃描間隔等所有設定集中於此。**要調整課表只需要改這個檔案。**
+* `env.ts`：載入 `.env`（若存在），各進入點最先 import。
 * `session.ts`：憑證的載入與最小化過濾（詳見下方「關於憑證」）。
 * `auth.ts`：互動式登入，完成 SSO 後產生 `auth_state.json`。
-* `core.ts`：核心功能封裝 —— 抓取課程列表（`getMyCourses`）與執行簽到（`checkIn`），藉由 Playwright 注入 GPS 座標並呼叫前端原生 `makeRollcall` 函式。全程共用單一瀏覽器實例。
+* `core.ts`：核心功能封裝 —— 抓取課程列表（`getMyCourses`）與執行簽到（`checkIn`），藉由 Playwright 注入 GPS 座標並呼叫前端原生 `makeRollcall` 函式，再依 `/app_v2/makeRollcall` 的 JSON 回應（`status` / `msg`）判定是否成功。全程共用單一瀏覽器實例。
 * `runner.ts`：單次掃描流程，由 `index.ts` 與 `schedule.ts` 共用。
-* `schedule.ts`：排程常駐程式，每分鐘檢查目前是否落在課堂時段內。
+* `schedule.ts`：排程常駐程式，每分鐘檢查目前是否落在課堂時段內。憑證失效時暫停，偵測到重新登入後自動恢復。
 * `index.ts`：單次掃描，用於手動測試。
+* `tests/`：`session.ts` 與 `config.ts` 的單元測試（`npm test`）。
 
 ## 關於憑證
 
@@ -110,15 +112,19 @@ npm start
 ## 疑難排解
 
 **憑證失效**
-排程偵測到被導回登入頁時會立刻暫停並提示，不會繼續空轉。重跑 `npm run login` 後重啟程式即可。
+排程偵測到被導回登入頁時會立刻暫停並提示，不會繼續空轉。在另一個視窗執行 `npm run login`，排程程式偵測到 `auth_state.json` 更新後會自動重新載入並恢復，不需要重啟。
+
+**簽到回報「未獲確認」**
+程式會印出伺服器的原始回應。常見的 `msg`：`ROLLCALL IS NOT ONAIR`（點名已關閉）、`LOSE THE GPS LOCATION`（座標沒送到，通常是 `config.ts` 座標設定問題）。`ROLLCALL IS ANSWERED` 表示這場已經簽過（例如用手機簽的），會被視為已完成而非錯誤。
 
 **想確認簽到請求的實際內容**
 在 `.env` 設定 `ZUVIO_DEBUG_NET=1`，程式會把點名頁上所有 XHR / fetch 的請求與回應印出來。
 
-**型別檢查**
+**型別檢查與測試**
 
 ```bash
 npm run typecheck
+npm test
 ```
 
 ---

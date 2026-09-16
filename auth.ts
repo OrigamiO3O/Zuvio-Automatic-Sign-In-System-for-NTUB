@@ -1,3 +1,4 @@
+import './env.js';
 import { chromium } from 'playwright';
 import { writeFileSync } from 'node:fs';
 import { AUTH_PATH, LOGIN_URL } from './config.js';

@@ -1,3 +1,4 @@
+import './env.js';
 import { ZuvioCore } from './core.js';
 import { scanOnce } from './runner.js';
 import { openWindows } from './config.js';

@@ -11,6 +11,8 @@ export const LOGIN_URL = `${ZUVIO_BASE}/irs/login`;
 export const COURSE_INDEX_URL = `${ZUVIO_BASE}/student5/irs/index`;
 export const rollcallUrl = (courseId: string) =>
   `${ZUVIO_BASE}/student5/irs/rollcall/${courseId}`;
+/** 頁面上 makeRollcall() 實際送出的端點（自頁面原始碼確認） */
+export const MAKE_ROLLCALL_PATH = '/app_v2/makeRollcall';
 
 /** 預設教室座標，個別課程可於 TIMETABLE 覆寫 */
 export const DEFAULT_LAT = 25.042345;
@@ -70,10 +72,16 @@ export function toMinutes(hhmm: string): number {
   return h * 60 + m;
 }
 
-/** 回傳當下正在進行中的課堂時段 */
-export function openWindows(now: Date = new Date()): ClassWindow[] {
+/**
+ * 回傳當下正在進行中的課堂時段。
+ * timetable 可注入，方便測試，也預留之後改由外部來源提供課表。
+ */
+export function openWindows(
+  now: Date = new Date(),
+  timetable: readonly ClassWindow[] = TIMETABLE,
+): ClassWindow[] {
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  return TIMETABLE.filter(
+  return timetable.filter(
     (w) =>
       w.weekday === now.getDay() &&
       nowMin >= toMinutes(w.start) &&

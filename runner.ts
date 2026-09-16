@@ -48,7 +48,7 @@ export async function scanOnce(
 
   if (courses.kind === 'SESSION_EXPIRED') {
     console.error(`🔑 憑證已失效：${courses.message}`);
-    console.error('   請重新執行：npx tsx auth.ts');
+    console.error('   請重新執行：npm run login');
     outcome.sessionExpired = true;
     return outcome;
   }
@@ -76,7 +76,7 @@ export async function scanOnce(
     console.log(`> ${describe(course.name, result)}`);
 
     if (result.kind === 'SESSION_EXPIRED') {
-      console.error('   憑證於掃描途中失效，中止本次掃描。請重新執行：npx tsx auth.ts');
+      console.error('   憑證於掃描途中失效，中止本次掃描。請重新執行：npm run login');
       outcome.sessionExpired = true;
       return outcome;
     }

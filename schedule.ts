@@ -1,7 +1,10 @@
+import './env.js';
 import cron from 'node-cron';
+import { statSync } from 'node:fs';
 import { ZuvioCore } from './core.js';
 import { scanOnce } from './runner.js';
 import {
+  AUTH_PATH,
   SCAN_INTERVAL_MINUTES,
   TIMETABLE,
   openWindows,
@@ -24,11 +27,48 @@ const lastScan = new Map<string, number>();
 
 let zuvio: ZuvioCore;
 let scanning = false;
-/** 憑證失效後暫停掃描，避免每 3 分鐘對著登入頁空轉 */
-let paused = false;
+/**
+ * 憑證失效後暫停掃描，避免每 3 分鐘對著登入頁空轉。
+ * 記下暫停當時憑證檔的 mtime，之後每分鐘比對，檔案一更新就自動 reload 並恢復。
+ */
+let pausedAtMtime: number | null = null;
+
+function authMtime(): number {
+  try {
+    return statSync(AUTH_PATH).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+/** 暫停中：偵測到重新登入後自動恢復，不必重啟程式 */
+async function tryResume(): Promise<void> {
+  const mtime = authMtime();
+  if (mtime === pausedAtMtime) return;
+
+  try {
+    await zuvio.reloadSession();
+  } catch (err: unknown) {
+    // 檔案變了但內容仍無效（例如登入到一半），記下 mtime 免得每分鐘重複報錯
+    pausedAtMtime = mtime;
+    const msg = err instanceof SessionExpiredError ? err.message : String(err);
+    console.error(`🔑 憑證檔已更新但仍無法使用：${msg}`);
+    return;
+  }
+
+  pausedAtMtime = null;
+  // 清掉節流紀錄，讓進行中的時段立刻補掃一次
+  lastScan.clear();
+  console.log(`\n[${new Date().toLocaleString('zh-TW')}] ✅ 偵測到新憑證，排程已恢復。`);
+}
 
 async function tick(): Promise<void> {
-  if (paused || scanning) return;
+  if (scanning) return;
+
+  if (pausedAtMtime !== null) {
+    await tryResume();
+    if (pausedAtMtime !== null) return;
+  }
 
   const now = new Date();
   const open = openWindows(now);
@@ -51,8 +91,8 @@ async function tick(): Promise<void> {
     const outcome = await scanOnce(zuvio, due);
 
     if (outcome.sessionExpired) {
-      paused = true;
-      console.error('\n⛔ 已暫停排程。重新登入後請重啟本程式。');
+      pausedAtMtime = authMtime();
+      console.error('\n⛔ 已暫停排程。請在另一個視窗執行 npm run login，完成後會自動恢復。');
     }
   } catch (err: unknown) {
     console.error('[錯誤] 掃描發生未預期異常:', err instanceof Error ? err.message : err);
