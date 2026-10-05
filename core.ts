@@ -1,4 +1,4 @@
-import { chromium, type Browser, type BrowserContext, type Page, type Response } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import {
   AUTH_PATH,
   COURSE_INDEX_URL,
@@ -54,10 +54,65 @@ interface MakeRollcallResponse {
   msg?: unknown;
 }
 
-type Verdict =
+export type Verdict =
   | { kind: 'ACCEPTED'; detail: string }
   | { kind: 'ANSWERED'; detail: string }
   | { kind: 'REJECTED'; detail: string };
+
+/** 判讀回應只需要這兩個方法；宣告成最小介面，測試才能餵假回應 */
+export interface RollcallResponseLike {
+  status(): number;
+  text(): Promise<string>;
+}
+
+/**
+ * 判讀 /app_v2/makeRollcall 的回應。
+ *
+ * 舊版 makeRollcall 之後 sleep 3 秒就 return true，從不確認結果；
+ * 上一版改為攔截 XHR 但只能用「2xx + 沒有失敗字樣」猜。現在端點與格式都
+ * 已自頁面原始碼確認，直接依 status / msg 判定。原始回應一律印出。
+ */
+export async function verifyRollcallResponse(
+  res: RollcallResponseLike | null,
+): Promise<Verdict> {
+  if (!res) {
+    return {
+      kind: 'REJECTED',
+      detail: `${RESPONSE_TIMEOUT / 1000} 秒內未攔截到 makeRollcall 請求，無法確認是否送達`,
+    };
+  }
+
+  const status = res.status();
+  // 完整 body 才拿去 parse —— 舊版先 slice(0, 500) 再 JSON.parse，回應夾了一包
+  // 廣告圖片 URL 時會超過 500 字元而被切成不合法 JSON，連 {"status":true} 的
+  // 成功回應都誤判成「不是 JSON」。截斷只用在日誌。
+  let body = '';
+  let readable = true;
+  try {
+    body = await res.text();
+  } catch {
+    readable = false;
+  }
+
+  const snippet = readable
+    ? body.replace(/\s+/g, ' ').trim().slice(0, 300)
+    : '(無法讀取回應內容)';
+  const detail = `HTTP ${status} → ${snippet}`;
+  console.log(`   [驗證] ${detail}`);
+
+  if (status < 200 || status >= 300) return { kind: 'REJECTED', detail };
+
+  let parsed: MakeRollcallResponse;
+  try {
+    parsed = JSON.parse(body) as MakeRollcallResponse;
+  } catch {
+    return { kind: 'REJECTED', detail: `回應不是 JSON：${detail}` };
+  }
+
+  if (parsed.status === true) return { kind: 'ACCEPTED', detail };
+  if (parsed.msg === 'ROLLCALL IS ANSWERED') return { kind: 'ANSWERED', detail };
+  return { kind: 'REJECTED', detail };
+}
 
 export class ZuvioCore {
   private browser: Browser | null = null;
@@ -218,7 +273,7 @@ export class ZuvioCore {
         return { kind: 'ERROR', message: `頁面上找不到 makeRollcall 函式（rollcall ${rid}）` };
       }
 
-      const verdict = await ZuvioCore.verify(await responsePromise);
+      const verdict = await verifyRollcallResponse(await responsePromise);
 
       switch (verdict.kind) {
         case 'ACCEPTED':
@@ -276,45 +331,6 @@ export class ZuvioCore {
     );
   }
 
-  /**
-   * 判讀 /app_v2/makeRollcall 的回應。
-   *
-   * 舊版 makeRollcall 之後 sleep 3 秒就 return true，從不確認結果；
-   * 上一版改為攔截 XHR 但只能用「2xx + 沒有失敗字樣」猜。現在端點與格式都
-   * 已自頁面原始碼確認，直接依 status / msg 判定。原始回應一律印出。
-   */
-  private static async verify(res: Response | null): Promise<Verdict> {
-    if (!res) {
-      return {
-        kind: 'REJECTED',
-        detail: `${RESPONSE_TIMEOUT / 1000} 秒內未攔截到 makeRollcall 請求，無法確認是否送達`,
-      };
-    }
-
-    const status = res.status();
-    let body = '';
-    try {
-      body = (await res.text()).slice(0, 500);
-    } catch {
-      body = '(無法讀取回應內容)';
-    }
-
-    const detail = `HTTP ${status} → ${body.replace(/\s+/g, ' ').trim()}`;
-    console.log(`   [驗證] ${detail}`);
-
-    if (status < 200 || status >= 300) return { kind: 'REJECTED', detail };
-
-    let parsed: MakeRollcallResponse;
-    try {
-      parsed = JSON.parse(body) as MakeRollcallResponse;
-    } catch {
-      return { kind: 'REJECTED', detail: `回應不是 JSON：${detail}` };
-    }
-
-    if (parsed.status === true) return { kind: 'ACCEPTED', detail };
-    if (parsed.msg === 'ROLLCALL IS ANSWERED') return { kind: 'ANSWERED', detail };
-    return { kind: 'REJECTED', detail };
-  }
 
   /** ZUVIO_DEBUG_NET=1 時傾印所有請求，用來確認實際端點 */
   private attachNetLogger(page: Page): void {
